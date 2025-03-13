@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZEDEDA Web Server</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-image: url('/static/Interior-BG.svg'); /* Add your background image here */
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            margin: 0;
+            padding: 0;
+        }
+        .header {
+            background-color: rgba(255, 255, 255, 0.8); /* Semi-transparent white background */
+            color: black;
+            padding: 10px;
+            text-align: center;
+            position: relative;
+        }
+        .logo {
+            position: absolute;
+            left: 10px;
+            top: 10px;
+        }
+        .container {
+            display: flex;
+            padding: 20px;
+        }
+        .left-frame, .right-frame {
+            flex: 1;
+            padding: 10px;
+        }
+        .right-frame {
+            display: flex;
+            flex-direction: column;
+        }
+        .frame {
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+            text-align: center;
+            background-color: white;
+        }
+        .frame img {
+            max-width: 100%;
+            height: auto;
+        }
+        .footer {
+            background-color: rgba(255, 255, 255, 0.8); /* Semi-transparent white background */
+            color: black;
+            text-align: center;
+            padding: 10px;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+        }
+    </style>
+    <script>
+        function updateContent() {
+            fetch('/get_content')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('image1').src = '/static/' + data.images[0] + '?t=' + timestamp;
+                    document.getElementById('image2').src = '/static/' + data.images[1] + '?t=' + timestamp;
+                    document.getElementById('image3').src = '/static/' + data.images[2] + '?t=' + timestamp;
+                    document.getElementById('footer-text').innerText = data.text;
+                });
+        }
+        setInterval(updateContent, 5); // Update every 5 seconds
+    </script>
+</head>
+<body>
+    <div class="header">
+        <img src="/static/zededa-logo001.png" alt="ZEDEDA Logo" class="logo" width="200">
+        <h1>Scalable and Secure Edge AI Orchestration with ZEDEDA</h1>
+        <h2>Dynamic A/B Model Routing</h2>
+    </div>
+    <div class="container">
+        <div class="left-frame">
+            <div class="frame">
+		<h3>Resnet-18</h3>
+                <img id="image1" src="/static/{{ images[0] }}" alt="Image 1">
+            </div>
+        </div>
+        <div class="right-frame">
+            <div class="frame">
+		<h3>Resnet-50</h3>
+                <img id="image2" src="/static/{{ images[1] }}" alt="Image 2">
+            </div>
+        </div>
+    </div>
+    <div class="footer">
+        <p id="footer-text">{{ text }}</p>
+    </div>
+</body>
+</html>
