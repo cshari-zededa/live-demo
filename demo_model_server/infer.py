@@ -40,8 +40,8 @@ font = cudaFont()
 # Allowed extensions for file uploads
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
-net1 = imageNet("googlenet")
-net2 = imageNet("googlenet") 
+net1 = imageNet("resnet-18")
+net2 = imageNet("resnet-50")
 
 models = [net1, net2]
 
@@ -54,14 +54,15 @@ def infer(input_file, net):
 
     # classify the image
     class_idx, confidence = net.Classify(img)
+    confidence = confidence * 100
 
     # find the object description
     classLabel = net.GetClassDesc(class_idx)
 
     # print out the result
-    print("image is recognized as '{:s}' (class #{:d}) with {:f}% confidence".format(classLabel, class_idx, confidence * 100))
+    print("image is recognized as '{:s}' (class #{:d}) with {:f}% confidence".format(classLabel, class_idx, confidence))
 
-    font.OverlayText(img, text=f"{confidence:05.2f}% {classLabel}", 
+    font.OverlayText(img, text=f"{confidence:05.2f}% {classLabel} {net.GetNetworkFPS():.2f} fps", 
                     x=5, y=5 + (font.GetSize() + 5),
                     color=font.White, background=font.Gray40)
 

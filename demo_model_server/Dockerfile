@@ -8,7 +8,9 @@ COPY jetson-inference/python/training/classification/data /jetson-inference/pyth
 COPY jetson-inference/python/training/classification/models /jetson-inference/python/training/classification/models
 COPY jetson-inference/python/training/detection/ssd/data /jetson-inference/python/training/detection/ssd/data
 COPY jetson-inference/python/training/detection/ssd/models /jetson-inference/python/training/detection/ssd/models
-#COPY my-recognition.py /opt/jetson-inference/build/aarch64/bin/my-recognition.py
+COPY infer.py /jetson-inference/infer.py
+COPY entrypoint.sh /jetson-inference/entrypoint.sh
+COPY nvidia/libnvdla_compiler.so /usr/lib/aarch64-linux-gnu/nvidia/libnvdla_compiler.so
 
 # Create a new user with a password (Change `myuser` and `mypassword` as needed)
 RUN useradd -m -s /bin/bash myuser && \
@@ -24,5 +26,4 @@ RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/
 WORKDIR /jetson-inference 
 
 # Start SSH service
-#CMD ["bash", "-c", "service ssh start; while true; do sleep 60; done"]
-CMD ["python3", "infer.py"]
+ENTRYPOINT ["/bin/bash", "entrypoint.sh"]

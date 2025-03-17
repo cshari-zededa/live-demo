@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZEDEDA Streaming</title>
+    <style>
+        body {
+            background-image: url('static/Interior-BG.svg');
+            background-size: cover;
+            text-align: center;
+            color: #FF9933;
+            margin: 0;
+            padding: 0;
+        }
+        #logo {
+            width: 150px;
+            margin-top: 20px;
+        }
+        h1 {
+            margin: 20px 0;
+        }
+        .container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            padding: 20px;
+        }
+        .box {
+            flex: 1 1 45%;
+            max-width: 45%;
+            border: 2px solid white;
+            box-sizing: border-box;
+        }
+        .box img {
+            width: 100%;
+            height: auto;
+        }
+	.left-frame h3, .right-frame h3 {
+            color: #FF9933; /* Saffron color */
+        }
+	.left-frame h2, .right-frame h2 {
+            color: #FF9933; /* Saffron color */
+            font-weight: bold; /* Make specific parts bold */
+        }
+	.left-frame p, .right-frame p {
+            color: #FF9933; /* Saffron color */
+        }
+    </style>
+</head>
+<body>
+    <img id="logo" src="static/zededa-logo001.png" alt="ZEDEDA Logo">
+    <h1>Dynamic AI Model Routing (A/B routing)</h1>
+    <h2>Live Performance Comparison</h2>
+    <div class="container">
+        <div class="box">
+		 <h2>Resnet-18</span></h2>
+		<img id="image1" src="" alt="Stream 1">
+                <p>ResNet-18 is a convolutional neural network that is 18 layers deep. It is a variant of the ResNet model which introduces the concept of residual learning to solve the problem of vanishing gradients in deep networks.</p>
+	</div>
+        <div class="box">
+		<h2>Resnet-50</h2>
+		<img id="image2" src="" alt="Stream 2">
+                <p>ResNet-50 is a convolutional neural network that is 50 layers deep. It is a more complex variant of the ResNet model, designed to handle more complex tasks and larger datasets by using deeper architectures.</p>
+	</div>
+    </div>
+
+    <script>
+    fetch("/config")
+          .then(response => response.json())
+          .then(config => {
+              const ws = new WebSocket(config.ws_url);
+
+              ws.onmessage = function(event) {
+                  const data = JSON.parse(event.data);
+                  document.getElementById('image1').src = 'data:image/jpeg;base64,' + hexToBase64(data.image1);
+                  document.getElementById('image2').src = 'data:image/jpeg;base64,' + hexToBase64(data.image2);
+              };
+
+              function hexToBase64(hexString) {
+                  return btoa(hexString.match(/\w{2}/g).map(a => String.fromCharCode(parseInt(a, 16)) ).join(""));
+              }
+          })
+          .catch(error => console.error("Error fetching WebSocket URL:", error));
+    </script>
+</body>
+</html>
