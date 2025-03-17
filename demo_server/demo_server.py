@@ -1,4 +1,3 @@
-from flask import Flask, render_template, send_from_directory, jsonify
 import time
 import random
 import os
@@ -6,103 +5,149 @@ import threading
 import cv2
 import requests
 import json
+import base64
+import shutil
+import asyncio
+import uvicorn
 
-app = Flask(__name__)
+from fastapi import FastAPI, WebSocket
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.websockets import WebSocketDisconnect
 
-# Path to the static folder
-STATIC_FOLDER = 'static'
+app = FastAPI()
+
+# Serve static files (HTML, images)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Initial images and text
-images = ["image1.png", "image2.png"]
-text = "Initial text from the server."
+images = ["image1.jpg", "image2.jpg"]
+
+STATIC_FOLDER = "static"
+OUTPUT_FOLDER = "static"
 
 # Global configuration for A/B routing
 spray_ratio = [0.4, 0.6]  # Default spray ratio (40% for server1, 60% for server2)
-config_url = "http://metadata-server/config"  # URL to fetch the spray ratio config
-server1_url = "http://192.168.1.2/inference"
-server2_url = "http://192.168.1.2/inference"
+# URL to fetch the spray ratio config
+patch_description_url="http://169.254.169.254/eve/v1/patch/description.json"
+server1_url = "http://192.168.1.3:5090/infer_model_a"
+server2_url = "http://192.168.1.3:5090/infer_model_b"
+text = "Initial text from the server."
 
-# Function to update images and text
-def update_content():
-    global images, text
-    while True:
-        time.sleep(10)  # Update every 10 seconds
-        # Simulate new images and text
-        images = [f"image{random.randint(1, 3)}.png" for _ in range(3)]
-        text = f"Updated text at {time.ctime()}"
+# Endpoint to serve the HTML page
+@app.get("/")
+async def get():
+    with open('static/index.html', 'r') as file:
+        content = file.read()
+    return HTMLResponse(content=content)
 
-# Serve the webpage
-@app.route('/')
-def index():
-    return render_template('index.html', images=images, text=text)
 
-# Endpoint to get updated content
-@app.route('/get_content')
-def get_content():
-    return jsonify({"images": images, "text": text})
+@app.get("/config")
+async def get_config():
+    ws_url = os.getenv("WS_URL", "ws://default-host:5085/ws")  # Default value if not set
+    return {"ws_url": ws_url}
 
-# Serve static files
-@app.route('/static/<filename>')
-def static_files(filename):
-    return send_from_directory(STATIC_FOLDER, filename)
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+#            print("serving")
+            image1_data = read_image('static/image1.jpg')
+            image2_data = read_image('static/image2.jpg')
+            await websocket.send_json({"image1": image1_data, "image2": image2_data})
+            await asyncio.sleep(0.1)  # Adjust the delay as needed
+    except WebSocketDisconnect:
+        pass
 
-def fetch_frames():
+def read_image(file_path):
+    with open(file_path, "rb") as image_file:
+        return image_file.read().hex()
+
+async def fetch_frames():
     cap = cv2.VideoCapture('/dev/video0')
+    if not cap.isOpened():
+        print("Error: Could not open video device.")
+        return
     while True:
         ret, frame = cap.read()
         if not ret:
+            print("Warning: Could not read frame from video device.")
+            time.sleep(1)  # Add a small delay before retrying
             continue
+        #print("Successfully captured frame from webcamera")
         send_to_inference_server(frame)
 
 def send_to_inference_server(frame):
-    server_url = select_server()
+    server_url, image_file_name = select_server()
     _, img_encoded = cv2.imencode('.jpg', frame)
-    files = {'image': ('frame.jpg', img_encoded.tobytes(), 'image/jpeg')}
-    response = requests.post(server_url, files=files)
+    files = {'file': ('frame.jpg', img_encoded.tobytes(), 'image/jpeg')}
+    print("sending request")
+    try:
+        response = requests.post(server_url, files=files, timeout=(1,1))
+    except requests.exceptions.RequestException as e:
+        print("Request failed:", e)
+        return
+    print("receiving response")
     if response.status_code == 200:
-        # Process the response if needed
-        output_image = response.content
-        # ...existing code...
+        # Ensure the directory exists
+        os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+        output_path = os.path.join(OUTPUT_FOLDER, 'output.jpg')
+          # Save the output image file from the response
+        with open(output_path, 'wb') as f:
+            f.write(response.content)
+
+        # Rename the output file to image1.jpg
+        final_path = os.path.join(STATIC_FOLDER, image_file_name)
+        shutil.move(output_path, final_path)
     else:
-        print(f"Failed to get response from {server_url}")
+        print(f"Failed to get response from {server_url}, {response.json()}")
 
 def select_server():
     if random.random() < spray_ratio[0]:
-        return server1_url
+        print(f"selecting {server1_url}")
+        return server1_url, "image1.jpg"
     else:
-        return server2_url
+        print(f"selecting {server2_url}")
+        return server2_url, "image2.jpg"
 
-def refresh_config():
+async def refresh_config():
     global spray_ratio
+    print("Starting periodic refresh of AB routing config")
     while True:
         try:
-            response = requests.get(config_url)
+            #print("Fetching config")
+            response = requests.get(patch_description_url)
             if response.status_code == 200:
-                config = response.json()
-                spray_ratio[0] = config.get('server1_ratio', 0.4)
-                spray_ratio[1] = config.get('server2_ratio', 0.6)
+                config_url = response.json()[0]['BinaryBlobs'][0]['url']
+                response = requests.get(config_url)
+                if response.status_code == 200:
+                    encoded_content = response.content
+                    decoded_content = base64.b64decode(encoded_content).decode('utf-8')
+                    config = json.loads(decoded_content)
+                    #print(config)
+                    spray_ratio[0] = config.get('modelA', 40) / 100
+                    spray_ratio[1] = config.get('modelB', 60) / 100
+                    text = f"Inference request distribution ratio: {spray_ratio[0]*100}, {spray_ratio[1]*100}"
+                else:
+                    print(response)
+            else:
+                print(response)
+
         except Exception as e:
             print(f"Failed to refresh config: {e}")
-        time.sleep(60)  # Refresh every 60 seconds
+        time.sleep(5)  # Refresh every 60 seconds
 
 
-#main 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5085)
-    # Start the content update thread
-    update_thread = threading.Thread(target=update_content)
-    update_thread.daemon = True
-    update_thread.start()
+def run_uvicorn():
+    uvicorn.run(app, host="0.0.0.0", port=5085)
 
-    # Start the inference routing thread 
-    frame_thread = threading.Thread(target=fetch_frames)
-    frame_thread.start()
+async def main():
+    # Start Uvicorn in a separate thread
+    thread = threading.Thread(target=run_uvicorn, daemon=True)
+    thread.start()
 
-    # Start the inference routing thread 
-    config_thread = threading.Thread(target=refresh_config)
-    config_thread.start()
+    # Run background tasks
+    await asyncio.gather(fetch_frames(), refresh_config())
 
-    #wait for completion 
-    frame_thread.join()
-    config_thread.join()
-    update_thread.join()
+asyncio.run(main())

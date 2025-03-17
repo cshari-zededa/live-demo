@@ -1,14 +1,13 @@
 FROM dustynv/jetson-inference:r36.3.0
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 RUN apt update && \
     apt install -y vim git ssh
 
-COPY jetson-inference/data /jetson-inference/data 
-COPY jetson-inference/python/training/classification/data /jetson-inference/python/training/classification/data
-COPY jetson-inference/python/training/classification/models /jetson-inference/python/training/classification/models
-COPY jetson-inference/python/training/detection/ssd/data /jetson-inference/python/training/detection/ssd/data
-COPY jetson-inference/python/training/detection/ssd/models /jetson-inference/python/training/detection/ssd/models
-#COPY my-recognition.py /opt/jetson-inference/build/aarch64/bin/my-recognition.py
+COPY demo_server.py /jetson-inference/demo_server.py 
+COPY static /jetson-inference/static
+COPY entrypoint.sh /jetson-inference/entrypoint.sh
 
 # Create a new user with a password (Change `myuser` and `mypassword` as needed)
 RUN useradd -m -s /bin/bash myuser && \
@@ -23,5 +22,6 @@ RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/
 
 WORKDIR /jetson-inference 
 
-# Start SSH service
-CMD ["bash", "-c", "service ssh start; while true; do sleep 60; done"]
+RUN pip3 install fastapi uvicorn[standard]
+
+ENTRYPOINT ["/bin/bash", "entrypoint.sh"]
