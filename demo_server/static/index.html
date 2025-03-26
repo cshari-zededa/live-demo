@@ -15,10 +15,10 @@
         }
         #logo {
             width: 150px;
-            margin-top: 20px;
+            margin-top: 60px;
         }
         h1 {
-            margin: 20px 0;
+            margin: 40px 0;
         }
         .container {
             display: flex;
@@ -47,12 +47,18 @@
 	.left-frame p, .right-frame p {
             color: #FF9933; /* Saffron color */
         }
+	.dynamic-text {
+            font-size: 16px;
+            color: blue;
+            font-weight: bold;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
     <img id="logo" src="static/zededa-logo001.png" alt="ZEDEDA Logo">
     <h1>Dynamic AI Model Routing (A/B routing)</h1>
-    <h2>Live Performance Comparison</h2>
+    <h2 id="dynamic-text"> </h2>
     <div class="container">
         <div class="box">
 		 <h2>Resnet-18</span></h2>
@@ -63,6 +69,7 @@
 		<h2>Resnet-50</h2>
 		<img id="image2" src="" alt="Stream 2">
                 <p>ResNet-50 is a convolutional neural network that is 50 layers deep. It is a more complex variant of the ResNet model, designed to handle more complex tasks and larger datasets by using deeper architectures.</p>
+
 	</div>
     </div>
 
@@ -74,8 +81,11 @@
 
               ws.onmessage = function(event) {
                   const data = JSON.parse(event.data);
+	          // ✅ Debug: Print only the dynamic_text
+        	  console.log("Dynamic Text:", data.dynamic_text);
                   document.getElementById('image1').src = 'data:image/jpeg;base64,' + hexToBase64(data.image1);
                   document.getElementById('image2').src = 'data:image/jpeg;base64,' + hexToBase64(data.image2);
+	          document.getElementById('dynamic-text').innerText = data.dynamic_text;
               };
 
               function hexToBase64(hexString) {

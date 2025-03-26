@@ -32,7 +32,9 @@ spray_ratio = [0.4, 0.6]  # Default spray ratio (40% for server1, 60% for server
 patch_description_url="http://169.254.169.254/eve/v1/patch/description.json"
 server1_url = "http://192.168.1.3:5090/infer_model_a"
 server2_url = "http://192.168.1.3:5090/infer_model_b"
-text = "Initial text from the server."
+text = f"Inference request distribution ratio: {spray_ratio[0]*100} : {spray_ratio[1]*100}"
+ws_url = os.getenv("WS_URL", "ws://default-host:5085/ws")  # Default value if not set
+initial_ws_url = ws_url 
 
 # Endpoint to serve the HTML page
 @app.get("/")
@@ -44,7 +46,6 @@ async def get():
 
 @app.get("/config")
 async def get_config():
-    ws_url = os.getenv("WS_URL", "ws://default-host:5085/ws")  # Default value if not set
     return {"ws_url": ws_url}
 
 @app.websocket("/ws")
@@ -52,10 +53,10 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-#            print("serving")
+            #print("serving")
             image1_data = read_image('static/image1.jpg')
             image2_data = read_image('static/image2.jpg')
-            await websocket.send_json({"image1": image1_data, "image2": image2_data})
+            await websocket.send_json({"image1": image1_data, "image2": image2_data, "dynamic_text": text})
             await asyncio.sleep(0.1)  # Adjust the delay as needed
     except WebSocketDisconnect:
         pass
@@ -77,18 +78,19 @@ async def fetch_frames():
             continue
         #print("Successfully captured frame from webcamera")
         send_to_inference_server(frame)
+        await asyncio.sleep(0.1)  # Adjust the delay as needed
 
 def send_to_inference_server(frame):
     server_url, image_file_name = select_server()
     _, img_encoded = cv2.imencode('.jpg', frame)
     files = {'file': ('frame.jpg', img_encoded.tobytes(), 'image/jpeg')}
-    print("sending request")
+    #print("sending request")
     try:
         response = requests.post(server_url, files=files, timeout=(1,1))
     except requests.exceptions.RequestException as e:
         print("Request failed:", e)
         return
-    print("receiving response")
+    #print("receiving response")
     if response.status_code == 200:
         # Ensure the directory exists
         os.makedirs(OUTPUT_FOLDER, exist_ok=True)
@@ -105,18 +107,20 @@ def send_to_inference_server(frame):
 
 def select_server():
     if random.random() < spray_ratio[0]:
-        print(f"selecting {server1_url}")
+        #print(f"selecting {server1_url}")
         return server1_url, "image1.jpg"
     else:
-        print(f"selecting {server2_url}")
+        #print(f"selecting {server2_url}")
         return server2_url, "image2.jpg"
 
 async def refresh_config():
     global spray_ratio
+    global text 
+    global ws_url 
     print("Starting periodic refresh of AB routing config")
     while True:
         try:
-            #print("Fetching config")
+            print("Fetching config")
             response = requests.get(patch_description_url)
             if response.status_code == 200:
                 config_url = response.json()[0]['BinaryBlobs'][0]['url']
@@ -124,10 +128,12 @@ async def refresh_config():
                 if response.status_code == 200:
                     encoded_content = response.content
                     decoded_content = base64.b64decode(encoded_content).decode('utf-8')
+                    print(decoded_content)
                     config = json.loads(decoded_content)
-                    #print(config)
+                    print(config)
                     spray_ratio[0] = config.get('modelA', 40) / 100
                     spray_ratio[1] = config.get('modelB', 60) / 100
+                    ws_url = config.get('ws_url', initial_ws_url)
                     text = f"Inference request distribution ratio: {spray_ratio[0]*100}, {spray_ratio[1]*100}"
                 else:
                     print(response)
@@ -136,7 +142,7 @@ async def refresh_config():
 
         except Exception as e:
             print(f"Failed to refresh config: {e}")
-        time.sleep(5)  # Refresh every 60 seconds
+        await asyncio.sleep(5)  # Adjust the delay as needed
 
 
 def run_uvicorn():
@@ -147,7 +153,7 @@ async def main():
     thread = threading.Thread(target=run_uvicorn, daemon=True)
     thread.start()
 
-    # Run background tasks
+    # Keep the event loop running
     await asyncio.gather(fetch_frames(), refresh_config())
 
 asyncio.run(main())
